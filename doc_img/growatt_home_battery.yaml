@@ -13,11 +13,11 @@ logger:
 # Enable Home Assistant API
 api:
   encryption:
-    key: ""
+    key: "your key here"
 
 ota:
   - platform: esphome
-    password: ""
+    password: "your PW here"
 
 wifi:
   ssid: !secret wifi_ssid
@@ -26,15 +26,15 @@ wifi:
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "Inverterlezer Fallback Hotspot"
-    password: ""
+    password: "your pw here"
 
 captive_portal:
 
 # RS485 Modbus config
 uart:
   - id: uart_pv
-    tx_pin: GPIO17 #check if correct for your board/port
-    rx_pin: GPIO16 #check if correct for your board/port
+    tx_pin: GPIO17
+    rx_pin: GPIO16
     baud_rate: 9600
     parity: NONE
     stop_bits: 1
@@ -56,12 +56,30 @@ modbus_controller:
 switch:
   - platform: modbus_controller
     modbus_controller_id: modbus_pv
-    name: "Growatt On/Off"
+    name: "Growatt On-Off"
     register_type: holding
     address: 0
-    bitmask: 1 # Assuming 1 is ON, 0 is OFF
+    bitmask: 1
     entity_category: config
     icon: mdi:toggle-switch
+
+  - platform: modbus_controller
+    modbus_controller_id: modbus_pv
+    name: "Growatt AC Charge Enable"
+    register_type: holding
+    address: 3049
+    bitmask: 1
+    entity_category: config
+    icon: mdi:battery-charging
+
+  # TimeSlot1 enable — local toggle, applied when you press the write button
+  - platform: template
+    name: "Growatt TimeSlot1 Enable"
+    id: ts1_enable
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    icon: mdi:calendar-check
 
 number:
   - platform: modbus_controller
@@ -79,8 +97,222 @@ number:
     icon: mdi:gauge
     mode: SLIDER
 
+  # ── TL-XH Battery First controls (3000-range) ────────────────────────
+  - platform: modbus_controller
+    modbus_controller_id: modbus_pv
+    name: "Growatt Battery First Power Rate"
+    register_type: holding
+    address: 3047
+    value_type: U_WORD
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    multiply: 1
+    entity_category: config
+    icon: mdi:gauge
+    mode: SLIDER
 
-sensor:   
+  - platform: modbus_controller
+    modbus_controller_id: modbus_pv
+    name: "Growatt Battery First Stop SOC"
+    register_type: holding
+    address: 3048
+    value_type: U_WORD
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    multiply: 1
+    entity_category: config
+    icon: mdi:gauge
+    mode: SLIDER
+
+  # ── Grid First controls (3000-range) ──────────────────────────────────
+  - platform: modbus_controller
+    modbus_controller_id: modbus_pv
+    name: "Growatt Grid First Discharge Power Rate"
+    register_type: holding
+    address: 3036
+    value_type: U_WORD
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    multiply: 1
+    entity_category: config
+    icon: mdi:gauge
+    mode: SLIDER
+
+  - platform: modbus_controller
+    modbus_controller_id: modbus_pv
+    name: "Growatt Grid First Stop SOC"
+    register_type: holding
+    address: 3037
+    value_type: U_WORD
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    multiply: 1
+    entity_category: config
+    icon: mdi:gauge
+    mode: SLIDER
+
+  ###########################################################################
+  #  TIME SLOT 1 — bit-packed registers 3038/3039
+  #
+  #  These are complex: each register packs hour, minute, priority, and
+  #  enable into a single 16-bit value. Direct slider control isn't
+  #  practical, so we use template numbers for the individual fields
+  #  and a button to assemble and write the packed value.
+  #
+  #  Register 3038 (start time + config):
+  #    Bit 0-7:   minutes (0-59)
+  #    Bit 8-12:  hour (0-23)
+  #    Bit 13-14: priority (0=load, 1=battery, 2=grid)
+  #    Bit 15:    enable (0=disabled, 1=enabled)
+  #
+  #  Register 3039 (end time):
+  #    Bit 0-7:   minutes (0-59)
+  #    Bit 8-12:  hour (0-23)
+  ###########################################################################
+
+  - platform: template
+    name: "Growatt TimeSlot1 Start Hour"
+    id: ts1_start_hour
+    min_value: 0
+    max_value: 23
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    entity_category: config
+    icon: mdi:clock-start
+    mode: SLIDER
+
+  - platform: template
+    name: "Growatt TimeSlot1 Start Minute"
+    id: ts1_start_min
+    min_value: 0
+    max_value: 59
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    entity_category: config
+    icon: mdi:clock-start
+    mode: SLIDER
+
+  - platform: template
+    name: "Growatt TimeSlot1 End Hour"
+    id: ts1_end_hour
+    min_value: 0
+    max_value: 23
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    entity_category: config
+    icon: mdi:clock-end
+    mode: SLIDER
+
+  - platform: template
+    name: "Growatt TimeSlot1 End Minute"
+    id: ts1_end_min
+    min_value: 0
+    max_value: 59
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 0
+    entity_category: config
+    icon: mdi:clock-end
+    mode: SLIDER
+
+  - platform: template
+    name: "Growatt TimeSlot1 Priority"
+    id: ts1_priority
+    min_value: 0
+    max_value: 2
+    step: 1
+    optimistic: true
+    restore_value: true
+    initial_value: 1
+    entity_category: config
+    icon: mdi:priority-high
+    mode: SLIDER
+    # 0=load first, 1=battery first, 2=grid first
+
+select:
+  - platform: template
+    name: "Growatt TimeSlot1 Priority Name"
+    id: ts1_priority_name
+    options:
+      - "Load First"
+      - "Battery First"
+      - "Grid First"
+    initial_option: "Battery First"
+    optimistic: true
+    entity_category: config
+    icon: mdi:priority-high
+    on_value:
+      - lambda: |-
+          if (x == "Load First") id(ts1_priority).make_call().set_value(0).perform();
+          else if (x == "Battery First") id(ts1_priority).make_call().set_value(1).perform();
+          else if (x == "Grid First") id(ts1_priority).make_call().set_value(2).perform();
+
+button:
+  # Write time slot 1 to registers 3038/3039
+  - platform: template
+    name: "Growatt Write TimeSlot1"
+    icon: mdi:upload
+    entity_category: config
+    on_press:
+      - lambda: |-
+          uint16_t start_h = (uint16_t)id(ts1_start_hour).state;
+          uint16_t start_m = (uint16_t)id(ts1_start_min).state;
+          uint16_t end_h   = (uint16_t)id(ts1_end_hour).state;
+          uint16_t end_m   = (uint16_t)id(ts1_end_min).state;
+          uint16_t prio    = (uint16_t)id(ts1_priority).state;
+          uint16_t enable  = id(ts1_enable).state ? 1 : 0;
+
+          // Pack register 3038: enable(15) | priority(13-14) | hour(8-12) | minutes(0-7)
+          uint16_t reg3038 = (enable << 15) | (prio << 13) | (start_h << 8) | start_m;
+          // Pack register 3039: hour(8-12) | minutes(0-7)
+          uint16_t reg3039 = (end_h << 8) | end_m;
+
+          ESP_LOGW("timeslot", ">>> Writing TimeSlot1: 3038=0x%04X 3039=0x%04X", reg3038, reg3039);
+          ESP_LOGW("timeslot", ">>>   Start=%02u:%02u End=%02u:%02u Prio=%u Enable=%u",
+                   start_h, start_m, end_h, end_m, prio, enable);
+
+          auto *ctl = id(modbus_pv);
+          ctl->queue_command(
+            esphome::modbus_controller::ModbusCommandItem::create_write_single_command(ctl, 3038, reg3038));
+      - delay: 1000ms
+      - lambda: |-
+          uint16_t end_h = (uint16_t)id(ts1_end_hour).state;
+          uint16_t end_m = (uint16_t)id(ts1_end_min).state;
+          uint16_t reg3039 = (end_h << 8) | end_m;
+
+          auto *ctl = id(modbus_pv);
+          ctl->queue_command(
+            esphome::modbus_controller::ModbusCommandItem::create_write_single_command(ctl, 3039, reg3039));
+      - logger.log:
+          level: WARN
+          format: ">>> TimeSlot1 written to 3038/3039"
+
+sensor:
+  # temp and humidity sensor
+  - platform: dht
+    model: DHT22
+    pin: GPIO18
+    temperature:
+      name: "Attic Temperature"
+    humidity:
+      name: "Attic Humidity"
+    update_interval: 60s
+    
     # Growatt read-only sensors with home assistant config
   - platform: modbus_controller
     modbus_controller_id: modbus_pv
@@ -107,7 +339,7 @@ sensor:
     device_class: power
     state_class: measurement
     icon: mdi:power-plug
-    value_type: U_DWORD
+    value_type: S_DWORD
     accuracy_decimals: 1
     filters:
       - multiply: 0.1
@@ -120,7 +352,7 @@ sensor:
     register_type: "read"
     unit_of_measurement: kWh
     device_class: energy 
-    state_class: measurement 
+    state_class: total_increasing
     icon: mdi:power-plug
     value_type: U_DWORD
     accuracy_decimals: 1
@@ -150,7 +382,7 @@ sensor:
     register_type: "read"
     unit_of_measurement: kWh
     device_class: energy 
-    state_class: measurement 
+    state_class: total_increasing
     icon: mdi:solar-power
     value_type: U_DWORD
     accuracy_decimals: 1
@@ -180,7 +412,7 @@ sensor:
     register_type: "read"
     unit_of_measurement: kWh
     device_class: energy 
-    state_class: measurement 
+    state_class: total_increasing
     icon: mdi:solar-power
     value_type: U_DWORD
     accuracy_decimals: 1
@@ -375,7 +607,7 @@ sensor:
     register_type: "read"
     unit_of_measurement: kWh
     device_class: energy 
-    state_class: measurement 
+    state_class: total_increasing
     icon: mdi:battery-arrow-down
     value_type: U_DWORD
     accuracy_decimals: 1
@@ -405,7 +637,7 @@ sensor:
     register_type: "read"
     unit_of_measurement: kWh
     device_class: energy 
-    state_class: measurement 
+    state_class: total_increasing
     icon: mdi:battery-arrow-up
     value_type: U_DWORD
     accuracy_decimals: 1
@@ -457,6 +689,91 @@ sensor:
     filters:
     - multiply: 0.1
 
+  # ── Priority readback ─────────────────────────────────────────────────
+  - platform: modbus_controller
+    modbus_controller_id: modbus_pv
+    name: "Growatt Priority Raw"
+    id: priority_raw
+    register_type: read
+    address: 2118
+    value_type: U_WORD
+    entity_category: diagnostic
+    icon: mdi:priority-high
+
+  # ── TL-XH time slot readback (decoded) ────────────────────────────────
+  - platform: modbus_controller
+    modbus_controller_id: modbus_pv
+    name: "Growatt TimeSlot1 Reg3038 Raw"
+    id: reg3038_raw
+    register_type: holding
+    address: 3038
+    value_type: U_WORD
+    entity_category: diagnostic
+
+  - platform: modbus_controller
+    modbus_controller_id: modbus_pv
+    name: "Growatt TimeSlot1 Reg3039 Raw"
+    id: reg3039_raw
+    register_type: holding
+    address: 3039
+    value_type: U_WORD
+    entity_category: diagnostic
+
+  - platform: template
+    name: "Growatt TimeSlot1 Readback StartHour"
+    lambda: |-
+      if (id(reg3038_raw).has_state())
+        return (float)(((int)id(reg3038_raw).state >> 8) & 0x1F);
+      return {};
+    entity_category: diagnostic
+    update_interval: 30s
+
+  - platform: template
+    name: "Growatt TimeSlot1 Readback StartMin"
+    lambda: |-
+      if (id(reg3038_raw).has_state())
+        return (float)((int)id(reg3038_raw).state & 0xFF);
+      return {};
+    entity_category: diagnostic
+    update_interval: 30s
+
+  - platform: template
+    name: "Growatt TimeSlot1 Readback EndHour"
+    lambda: |-
+      if (id(reg3039_raw).has_state())
+        return (float)(((int)id(reg3039_raw).state >> 8) & 0x1F);
+      return {};
+    entity_category: diagnostic
+    update_interval: 30s
+
+  - platform: template
+    name: "Growatt TimeSlot1 Readback EndMin"
+    lambda: |-
+      if (id(reg3039_raw).has_state())
+        return (float)((int)id(reg3039_raw).state & 0xFF);
+      return {};
+    entity_category: diagnostic
+    update_interval: 30s
+
+  - platform: template
+    name: "Growatt TimeSlot1 Readback Enabled"
+    lambda: |-
+      if (id(reg3038_raw).has_state())
+        return (float)(((int)id(reg3038_raw).state >> 15) & 1);
+      return {};
+    entity_category: diagnostic
+    update_interval: 30s
+
+  - platform: template
+    name: "Growatt TimeSlot1 Readback Priority"
+    lambda: |-
+      if (id(reg3038_raw).has_state())
+        return (float)(((int)id(reg3038_raw).state >> 13) & 0x03);
+      return {};
+    entity_category: diagnostic
+    update_interval: 30s
+    # 0=load first, 1=battery first, 2=grid first
+
 text_sensor:
   - platform: modbus_controller
     modbus_controller_id: modbus_pv
@@ -473,3 +790,19 @@ text_sensor:
         default: return std::string("Unknown");
       }
     icon: mdi:information
+
+  - platform: template
+    name: "Growatt Priority"
+    lambda: |-
+      if (id(priority_raw).has_state()) {
+        int val = (int)id(priority_raw).state;
+        switch (val) {
+          case 0: return std::string("Load First");
+          case 1: return std::string("Battery First");
+          case 2: return std::string("Grid First");
+          default: return std::string("Unknown");
+        }
+      }
+      return std::string("waiting...");
+    update_interval: 30s
+    icon: mdi:priority-high
